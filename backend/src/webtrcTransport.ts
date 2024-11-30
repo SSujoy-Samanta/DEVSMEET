@@ -1,5 +1,9 @@
 import axios from "axios";
+import dotenv from 'dotenv';
 
+dotenv.config();
+
+const IP=process.env.IP
 
 // Function to fetch public IP address
 const getPublicIP = async () => {
@@ -21,7 +25,7 @@ export const createWebRtcTransport = async (router: any):Promise<any> => {
             const webRtcTransport_options = {
                 listenIps: [
                     {
-                        ip: '192.168.0.108', // Bind to all available interfaces
+                        ip: IP, // Bind to all available interfaces
                         //announcedIp: publicIp, // Public IP addressde
                     }
                 ],
