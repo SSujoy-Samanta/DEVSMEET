@@ -21,7 +21,7 @@ export const createWebRtcTransport = async (router: any):Promise<any> => {
             const webRtcTransport_options = {
                 listenIps: [
                     {
-                        ip: '192.168.0.101', // Bind to all available interfaces
+                        ip: '192.168.0.108', // Bind to all available interfaces
                         //announcedIp: publicIp, // Public IP addressde
                     }
                 ],

@@ -1,19 +1,15 @@
 'use client'
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import io from "socket.io-client";
 import * as mediasoupClient from "mediasoup-client";
 const URL=process.env.NEXT_PUBLIC_WS_URL
 
 
-export const Videocall= ({roomName="sujoy"}:{
+export const Stream= ({roomName="sujoy"}:{
     roomName:string
 }) => {
     let socket:any;
-    let device:any;
-    let rtpCapabilities:any;
-    let producerTransport:any;
-    let audioProducer:any;
-    let videoProducer:any;
+    let device:mediasoupClient.Device;
     let consumerTransports:any[] = []
     const videoContainerRef = useRef<HTMLDivElement>(null);
     const videoContainerconsumerRef = useRef<HTMLDivElement>(null);
@@ -35,8 +31,6 @@ export const Videocall= ({roomName="sujoy"}:{
 
         const audioParams = { track: stream.getAudioTracks()[0] };
         const videoParams = { ...params, track: stream.getVideoTracks()[0] };
-        // console.log("audio:"+audioParams);
-        // console.log("video:"+videoParams);
 
         joinRoom(audioParams, videoParams);
     };
@@ -54,17 +48,20 @@ export const Videocall= ({roomName="sujoy"}:{
     const joinRoom = (audioParams: any, videoParams: any) => {
         console.log(socket)
         socket?.emit("joinRoom", { roomName }, (data: any) => {
-            rtpCapabilities=data.rtpCapabilities;
-            createDevice(audioParams, videoParams);
+            const rtpCapabilities=data.rtpCapabilities;
+            createDevice(audioParams, videoParams,rtpCapabilities);
         });
     };
 
-    const createDevice = async (audioParams: any, videoParams: any) => {
+    const createDevice = async (audioParams: any, videoParams: any,rtpCapabilities:any) => {
         try {
+          
             const newDevice = new mediasoupClient.Device();
             await newDevice.load({ routerRtpCapabilities: rtpCapabilities });
             device=newDevice;
-            createSendTransport(newDevice, audioParams, videoParams);
+            createSendTransport(device, audioParams, videoParams);
+            
+            
         } catch (error) {
             console.error("Device error:", error);
         }
@@ -106,10 +103,10 @@ export const Videocall= ({roomName="sujoy"}:{
                 }
             });
 
-            audioProducer = await transport.produce(audioParams);
-            videoProducer = await transport.produce(videoParams);
+            const audioProducer = await transport.produce(audioParams);
+            const videoProducer = await transport.produce(videoParams);
         
-            producerTransport=transport;
+            //producerTransport=transport;
 
             audioProducer.on('trackended', () => {
                 console.log('audio track ended')
@@ -219,8 +216,6 @@ export const Videocall= ({roomName="sujoy"}:{
         );
     };
 
-
-    
     useEffect(() => {
         const newSocket = io(URL);
         socket=newSocket;
@@ -268,5 +263,3 @@ export const Videocall= ({roomName="sujoy"}:{
         <div id="videoContainer" ref={videoContainerconsumerRef } className=""></div>
     </div>;
 };
-
-
