@@ -1,4 +1,4 @@
-import { Streamnew } from "@/components/Smaple";
+import { StreamMedia } from "@/components/StreamMedia";
 import { Stream } from "@/components/Stream";
 import { Videocall } from "@/components/Videocall";
 
@@ -8,7 +8,7 @@ export default function Home() {
     <div className="h-full w-full">
       {/* <Videocall roomName="sagar" /> */}
       {/* <Stream roomName="sujoy"/> */}
-      <Streamnew roomName="mee"/>
+      <StreamMedia roomName="mee"/>
     </div>
   );
 }

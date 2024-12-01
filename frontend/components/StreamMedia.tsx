@@ -1,5 +1,5 @@
 'use client';
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import io from "socket.io-client";
 import * as mediasoupClient from "mediasoup-client";
 import { AudioToggle } from "./AudioToggle";
@@ -7,7 +7,7 @@ import { VideoToggle } from "./VideoToggle";
 
 const URL = process.env.NEXT_PUBLIC_WS_URL || "";
 
-export const Streamnew = ({ roomName = "sujoy" }: { roomName: string }) => {
+export const StreamMedia = ({ roomName = "sujoy" }: { roomName: string }) => {
     const socket = useRef<any>(null);
     const device = useRef<mediasoupClient.Device | null>(null);
     const consumerTransports = useRef<any[]>([]);
@@ -20,14 +20,17 @@ export const Streamnew = ({ roomName = "sujoy" }: { roomName: string }) => {
         video: null as string | null,
     });
 
-    const params = {
-        encodings: [
-            { rid: "r0", maxBitrate: 100000, scalabilityMode: "S1T3" },
-            { rid: "r1", maxBitrate: 300000, scalabilityMode: "S1T3" },
-            { rid: "r2", maxBitrate: 900000, scalabilityMode: "S1T3" },
-        ],
-        codecOptions: { videoGoogleStartBitrate: 1000 },
-    };
+    const params = useMemo(
+        () => ({
+            encodings: [
+                { rid: "r0", maxBitrate: 100000, scalabilityMode: "S1T3" },
+                { rid: "r1", maxBitrate: 300000, scalabilityMode: "S1T3" },
+                { rid: "r2", maxBitrate: 900000, scalabilityMode: "S1T3" },
+            ],
+            codecOptions: { videoGoogleStartBitrate: 1000 },
+        }),
+        []
+    );
 
     const getLocalStream = useCallback(() => {
         navigator.mediaDevices
@@ -50,7 +53,7 @@ export const Streamnew = ({ roomName = "sujoy" }: { roomName: string }) => {
                 });
             })
             .catch((error) => console.error("Stream error:", error));
-    }, []);
+    }, [params]);
 
     const joinRoom = ({ audioParams, videoParams }: any) => {
         socket.current?.emit("joinRoom", { roomName }, (data: any) => {
@@ -108,7 +111,7 @@ export const Streamnew = ({ roomName = "sujoy" }: { roomName: string }) => {
     };
     const getProducers = () => {
         socket.current?.emit("getProducers", (producerIds: string[]) => {
-            console.log(producerIds)
+            // console.log(producerIds)
             producerIds.forEach(signalNewConsumerTransport);
         });
     };
@@ -165,7 +168,7 @@ export const Streamnew = ({ roomName = "sujoy" }: { roomName: string }) => {
                         newElem.innerHTML = `<audio id="${remoteProducerId}" autoplay></audio>`;
                     } else {
                         // Append to the video container
-                        newElem.setAttribute("class", "remoteVideo");
+                        newElem.setAttribute("class", `remoteVideo`);
                         newElem.innerHTML = `<video id="${remoteProducerId}" autoplay class="video stream"></video>`;
                     }
 
@@ -176,7 +179,7 @@ export const Streamnew = ({ roomName = "sujoy" }: { roomName: string }) => {
             
                 // Set the media stream to the appropriate element
                 const { track } = consumer;
-                console.log(track)
+               // console.log(track)
                 const mediaElement = document.getElementById(remoteProducerId) as HTMLMediaElement;
                 //console.log("Track"+JSON.stringify(consumer))
                 if (mediaElement) {
@@ -196,8 +199,12 @@ export const Streamnew = ({ roomName = "sujoy" }: { roomName: string }) => {
             console.log("Connected to WebSocket:", socketId);
             getLocalStream();
         });
+        newSocket.on("newuser",()=>{
+            alert("new user joined")
+        })
 
         newSocket.on("new-producer", ({ producerId }: any) => signalNewConsumerTransport(producerId));
+
         newSocket.on('producer-closed', ({ remoteProducerId }: { remoteProducerId: string }) => {
             // Server notification is received when a producer is closed
             // We need to close the client-side consumer and associated transport
@@ -223,20 +230,45 @@ export const Streamnew = ({ roomName = "sujoy" }: { roomName: string }) => {
             }
         });
 
+        newSocket.on("producer-paused", ({ producerId }:{producerId:string}) => {
+            console.log(`Producer ${producerId} is paused`);
+            // Update UI to indicate paused state
+            const statusElement = document.getElementById(`${producerId}`);
+            if (statusElement){
+                const newDiv=document.createElement("div");
+                newDiv.setAttribute("id", `muted-${producerId}`);
+                newDiv.innerText = `Paused`
+                statusElement.appendChild(newDiv);   
+            }
+        });
+          
+        newSocket.on("producer-resumed", ({ producerId }:{producerId:string}) => {
+            console.log(`Producer ${producerId} is resumed`);
+            // Update UI to indicate resumed state
+            const statusElement = document.getElementById(`muted-${producerId}`);
+            if (statusElement) statusElement.remove();
+        });
+
         return () => {
             newSocket.close();
         };
     }, [getLocalStream]);
 
     return (
-        <div>
-            <div ref={videoContainerRef} className="localStream">
+        <div className="bg-black min-h-screen w-full text-sky-600 grid grid-cols-5">
+            <div className="flex flex-col gap-2 col-span-1 ">
                 <div>Local Stream</div>
+                <div ref={videoContainerRef} className="localStream"></div>
+                <div>
+                    <div className="flex gap-2">
+                        {producers.audio && <AudioToggle socket={socket.current} producerId={producers.audio}  localStreamRef={ localStreamRef} />}
+                        {producers.video && <VideoToggle socket={socket.current} producerId={producers.video} localStreamRef={localStreamRef} />}
+                    </div>
+                </div>
             </div>
-            {producers.audio && <AudioToggle socket={socket.current} producerId={producers.audio}  localStreamRef={ localStreamRef} />}
-            {producers.video && <VideoToggle socket={socket.current} producerId={producers.video} localStreamRef={localStreamRef} />}
-            <div ref={remoteVideoContainerRef} className="remoteStreams">
+            <div className="col-span-4">
                 <div>Remote Streams</div>
+                <div ref={remoteVideoContainerRef} className="remoteStreams flex flex-wrap gap-2"></div>
             </div>
         </div>
     );

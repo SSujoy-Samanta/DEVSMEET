@@ -173,7 +173,8 @@ io.on('connection', async (socket) => {
                     consumers: [],
                     peerDetails: { name: '', isAdmin: false },
                 };
-        
+                socket.join(roomName);
+                socket.to(roomName).emit("newuser");
                 const rtpCapabilities = router.rtpCapabilities;
                 callback({ rtpCapabilities });
             } catch (error:any) {

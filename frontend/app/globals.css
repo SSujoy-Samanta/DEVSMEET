@@ -2,5 +2,5 @@
 @tailwind components;
 @tailwind utilities;
 .stream{
-    border:2px solid rgb(59, 58, 58);
+    border:2px solid cyan;
 }
