@@ -44,6 +44,11 @@ let worker: any;
 
 let rooms: Record<string,RoomItem> = {}; // Room details
 let peers: Record<string,PeerItem> = {}; // Peer details
+// Track users in rooms
+const ChatRooms: Record<string, Set<string>> = {};
+// Track socket to user/room mapping
+const socketUserMap = new Map<string, { username: string, roomId: string }>();
+
 
 interface TransportItem{
     socketId: string;
@@ -441,7 +446,252 @@ io.on('connection', async (socket) => {
             } catch (error:any) {
                 console.error(`Error resume producer with id ${producerId}:`, error);
             }
+        }); 
+        socket.on("close-producer", ({ producerId },callback) => {
+            try {
+                const producerItem = producers.find((item) => item.producer.id === producerId);
+                if (producerItem) {
+                    producerItem.producer.close();
+                    producers = producers.filter((item) => item.producer.id !== producerId);
+                    console.log(`Producer with ID ${producerId} has been closed.`);
+                    callback({result:true})
+                } else {
+                    console.error(`Producer with ID ${producerId} not found.`);
+                    callback({result:false})
+                }
+            } catch (error:any) {
+                console.error(`closing producer error`);
+                callback({result:false})
+            }
         });
+        let imageUrl:any;
+        socket.on("joinBoardRoom",({roomName})=>{
+            socket.join(roomName);
+            console.log("new user join drawing room:"+roomName);
+            socket.to(roomName).emit("drawingresponse",{imageUrl}) 
+        })
+        socket.on("drawing", ({canvasImage,roomName})=>{
+            console.log(roomName);
+            imageUrl=canvasImage;
+            socket.to(roomName).emit("drawingresponse",{canvasImage})
+        })
+
+        socket.on("joinChatRoom", ({ username, roomId }: { username: string; roomId: string }) => {
+            const existingUser = socketUserMap.get(socket.id);
+        
+            const oldRoomId = existingUser?.roomId;
+            const isSwitchingRoom = oldRoomId && oldRoomId !== roomId;
+        
+            // If user is switching rooms
+            if (isSwitchingRoom) {
+                // Leave old room in Socket.IO
+                socket.leave(oldRoomId);
+        
+                // Remove from old room set
+                if (ChatRooms[oldRoomId]) {
+                    ChatRooms[oldRoomId].delete(username);
+        
+                    // Notify others
+                    socket.to(oldRoomId).emit("message", {
+                        id: Date.now().toString(),
+                        content: `${username} has left the chat`,
+                        sender: "system",
+                        timestamp: new Date(),
+                    });
+        
+                    // Delete room if empty
+                    if (ChatRooms[oldRoomId].size === 0) {
+                        delete ChatRooms[oldRoomId];
+                    }
+                }
+            }
+        
+            // Join new room
+            socket.join(roomId);
+        
+            // Initialize new room
+            if (!ChatRooms[roomId]) {
+                ChatRooms[roomId] = new Set();
+            }
+        
+            // Add user to new room
+            ChatRooms[roomId].add(username);
+        
+            // Update socket-user mapping
+            socketUserMap.set(socket.id, { username, roomId });
+        
+            // Notify room about new user
+            socket.to(roomId).emit("message", {
+                id: Date.now().toString(),
+                content: `${username} has joined the chat`,
+                sender: "system",
+                timestamp: new Date(),
+            });
+        
+            // Confirm to the user
+            socket.emit("room-joined", {
+                roomId,
+                message: `You have joined ${roomId}`,
+            });
+        
+            console.log(`User ${username} joined room: ${roomId}`);
+        });
+        
+        // Message handling
+        socket.on('message', (message) => {
+            // Retrieve current room from the map
+            const userInfo = socketUserMap.get(socket.id);
+            if (!userInfo) return;
+            
+            // Broadcast message to all users in the room except sender
+            socket.to(userInfo.roomId).emit('message', {
+                ...message,
+                sender: 'other', // Change sender to 'other' for recipients
+                username:userInfo.username
+            });
+        });
+        
+        // Typing indicators
+        socket.on('typing', () => {
+            const userInfo = socketUserMap.get(socket.id);
+            if (!userInfo) return;
+            
+            socket.to(userInfo.roomId).emit('typing', userInfo.username);
+        });
+        
+        socket.on('stop-typing', () => {
+            const userInfo = socketUserMap.get(socket.id);
+            if (!userInfo) return;
+            
+            socket.to(userInfo.roomId).emit('stop-typing', userInfo.username);
+        });
+        
+        // Handle disconnect
+        socket.on('disconnect', () => {
+            // Retrieve user info from our map
+            const userInfo = socketUserMap.get(socket.id);
+            
+            if (userInfo) {
+            const { username, roomId } = userInfo;
+            console.log(`User disconnected: ${username} from room: ${roomId}`);
+            
+            // Remove user from our mapping
+            socketUserMap.delete(socket.id);
+            
+            if (ChatRooms[roomId]) {
+                // Remove user from room
+                ChatRooms[roomId].delete(username);
+                
+                // Remove room if empty
+                if (ChatRooms[roomId].size === 0) {
+                    delete ChatRooms[roomId];
+                    console.log(`Room ${roomId} was deleted as it's now empty`);
+                } else {
+                    // Notify room about user leaving
+                    socket.to(roomId).emit('message', {
+                        id: Date.now().toString(),
+                        content: `${username} has left the chat`,
+                        sender: 'system',
+                        timestamp: new Date()
+                    });
+                }
+            }
+            } else {
+                console.log(`Socket ${socket.id} disconnected (user info not found)`);
+            }
+        });
+        
+        // Handle user explicitly leaving a room
+        socket.on('leave-room', () => {
+            const userInfo = socketUserMap.get(socket.id);
+            if (!userInfo) return;
+            
+            const { username, roomId } = userInfo;
+            
+            // Remove from room
+            if (ChatRooms[roomId]) {
+                ChatRooms[roomId].delete(username);
+            
+                // Notify others in the room
+                socket.to(roomId).emit('message', {
+                    id: Date.now().toString(),
+                    content: `${username} has left the chat`,
+                    sender: 'system',
+                    timestamp: new Date()
+                });
+            
+                // Remove room if empty
+                if (ChatRooms[roomId].size === 0) {
+                    delete ChatRooms[roomId];
+                    console.log(`Room ${roomId} was deleted as it's now empty`);
+                }
+            }
+            
+            // Leave the Socket.io room
+            socket.leave(roomId);
+        });
+        // Handle user joining a new room
+        socket.on('join-chat-room', (newRoomId: string) => {
+            const userInfo = socketUserMap.get(socket.id);
+            if (!userInfo) return;
+            
+            const { username, roomId: oldRoomId } = userInfo;
+            
+            // Leave old room first
+            if (oldRoomId !== newRoomId) {
+                // Remove from old room
+                if (ChatRooms[oldRoomId]) {
+                    ChatRooms[oldRoomId].delete(username);
+                    
+                    // Notify others in old room
+                    socket.to(oldRoomId).emit('message', {
+                        id: Date.now().toString(),
+                        content: `${username} has left the chat`,
+                        sender: 'system',
+                        timestamp: new Date()
+                    });
+                    
+                    // Remove old room if empty
+                    if (ChatRooms[oldRoomId].size === 0) {
+                        delete ChatRooms[oldRoomId];
+                    }
+                }
+            
+                // Leave Socket.io room
+                socket.leave(oldRoomId);
+            
+                // Join new room
+                socket.join(newRoomId);
+            
+                // Initialize new room if it doesn't exist
+                if (!ChatRooms[newRoomId]) {
+                    ChatRooms[newRoomId] = new Set();
+                }
+            
+                // Add user to new room
+                ChatRooms[newRoomId].add(username);
+            
+                // Update user info in our map
+                socketUserMap.set(socket.id, { username, roomId: newRoomId });
+                
+                // Notify new room about user joining
+                socket.to(newRoomId).emit('message', {
+                    id: Date.now().toString(),
+                    content: `${username} has joined the chat`,
+                    sender: 'system',
+                    timestamp: new Date()
+                });
+                
+                // Confirm room change to the user
+                socket.emit('room-changed', { 
+                    roomId: newRoomId,
+                    message: `You have joined ${newRoomId}`
+                });
+            }
+        });
+  
+       
+        
     } catch (error:any) {
         console.log("Internal server Error:"+error);
     }
