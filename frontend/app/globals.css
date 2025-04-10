@@ -2,5 +2,5 @@
 @tailwind components;
 @tailwind utilities;
 .stream{
-    border:2px solid cyan;
+    border-radius: 5%;
 }
