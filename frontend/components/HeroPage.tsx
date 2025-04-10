@@ -212,7 +212,7 @@ export default function HeroPage() {
             <div className="container mx-auto px-6 py-20 text-center">
                 <h2 className="text-3xl md:text-4xl font-bold mb-6">Ready to transform how your team collaborates?</h2>
                 <p className="text-slate-300 max-w-2xl mx-auto mb-8">Join thousands of teams that have enhanced their productivity with DevsMeet.</p>
-                <a href="/signup" className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-medium px-8 py-4 rounded-lg transition-all transform hover:scale-105">
+                <a href="/home" className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-medium px-8 py-4 rounded-lg transition-all transform hover:scale-105">
                     Start Your Free Trial
                 </a>
                 <p className="text-slate-400 mt-4">No credit card required. 14-day free trial.</p>
